@@ -17,16 +17,17 @@ DB_CONFIG = {
 CONTEXT_MAX_MESSAGES = 5
 
 TEXT_BOT_CONFIGS = {
-    ("gpt",): "GPT-5",
+    ("gpt",): "GPT-5.2",
     ("o3",): "o3",
-    ("gem", "гем"): "Gemini-2.5-Pro",
+    ("gem", "гем"): "Gemini-3.0-Pro",
     ("jam", "джем"): "EVILMENI",
     ("кратко", "кракто"): "GEMSHORT",
     ("джонни",): "JOHHNNYSILVERHAND",
     ("пахом",): "creativebottt",
-    ("flash", "флеш"): "Gemini-2.5-Flash",
+    ("flash", "флеш"): "Gemini-3-Flash",
     ("злод",): "EVILAUDE",
     ("клод",): "Claude-3.5-Sonnet",
+    ("py",): "Python"
 }
 
 IMAGE_BOT_CONFIGS = {
@@ -38,16 +39,7 @@ BOT_CONFIGS = {**TEXT_BOT_CONFIGS, **IMAGE_BOT_CONFIGS}
 
 IMAGE_BOT_MODELS = set(IMAGE_BOT_CONFIGS.values())
 
-WEB_SEARCH_BOTS = {
-    "GPT-5",
-    "Gemini-2.5-Pro",
-    "EVILMENI",
-    "GEMSHORT",
-    "Gemini-2.5-Flash",
-}
-
-ECONOMY_BOT_MODELS = {"Gemini-2.5-Flash"}
-ECONOMY_BOTS = {"Gemini-2.5-Flash"}
+ECONOMY_BOTS = {"Gemini-3-Flash"}
 
 ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0"))
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "")

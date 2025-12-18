@@ -8,7 +8,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.error import BadRequest
 import telegramify_markdown
-from config import BOT_CONFIGS, CONTEXT_MAX_MESSAGES, POE_API_KEY, ADMIN_CHAT_ID, WEB_SEARCH_BOTS, ECONOMY_BOTS, UPLOAD_PROXY_URL
+from config import BOT_CONFIGS, CONTEXT_MAX_MESSAGES, POE_API_KEY, ADMIN_CHAT_ID, ECONOMY_BOTS, UPLOAD_PROXY_URL
 from handlers_shared import db
 import handlers_shared
 from ai_client import PoeChatClient
@@ -226,7 +226,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 os.environ["ALL_PROXY"] = old_all
 
-    if model in WEB_SEARCH_BOTS and content:
+    if content:
         web_search_params = {"web_search": "true"}
     else:
         web_search_params = None

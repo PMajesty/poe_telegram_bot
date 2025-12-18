@@ -9,7 +9,9 @@ class PoeChatClient:
             role = "bot" if msg["role"] == "assistant" else msg["role"]
             attachments = msg.get("attachments", [])
             parameters = msg.get("parameters")
-            if parameters is not None:
+            
+            # Logic Change: Only include parameters if it is NOT an image bot
+            if parameters is not None and model not in IMAGE_BOT_MODELS:
                 protocol_messages.append(
                     fp.ProtocolMessage(role=role, content=msg["content"], attachments=attachments, parameters=parameters)
                 )
