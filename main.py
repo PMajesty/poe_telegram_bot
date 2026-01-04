@@ -6,7 +6,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.client.session.aiohttp import AiohttpSession
-from config import TELEGRAM_BOT_TOKEN
+from config import TELEGRAM_BOT_TOKEN, UPLOAD_PROXY_URL
 from command_handlers import router as command_router
 from chat_handlers import router as chat_router
 
@@ -17,10 +17,8 @@ async def main():
     if "api.telegram.org" not in current_no_proxy:
         os.environ["NO_PROXY"] = ",".join(filter(None, [current_no_proxy, "api.telegram.org"]))
 
-    # Configured with provided proxy: http://user:pass@ip:port
-    # Increased timeout to 60.0s to accommodate proxy latency
     session = AiohttpSession(
-        proxy="http://FFHNSC:XJ1r9Q@209.46.3.196:8000",
+        proxy=UPLOAD_PROXY_URL,
         timeout=60.0
     )
 

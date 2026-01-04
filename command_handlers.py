@@ -18,7 +18,6 @@ def is_admin_user(user) -> bool:
     return bool(user and user.username == ADMIN_USERNAME)
 
 async def fetch_current_balance(request_id: str = "N/A"):
-    # [FIX] Added Accept-Encoding to avoid Brotli (br) compression issues
     headers = {
         "Authorization": f"Bearer {POE_API_KEY}",
         "Accept-Encoding": "gzip, deflate"

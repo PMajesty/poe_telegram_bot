@@ -17,13 +17,11 @@ class PoeChatClient:
                 openai_messages.append({"role": role, "content": content})
                 continue
             
-            # Construct content list for multimodal input
             content_parts = []
             if content:
                 content_parts.append({"type": "text", "text": content})
             
             for att in attachments:
-                # att is expected to be a dict with keys: filename, content_type, data_base64
                 mime = att.get("content_type", "application/octet-stream")
                 b64 = att.get("data_base64", "")
                 filename = att.get("filename", "file")
@@ -46,9 +44,6 @@ class PoeChatClient:
             
             openai_messages.append({"role": role, "content": content_parts})
 
-        # Prepare parameters
-        # Note: The doc says 'stream' is fully supported. We use stream=False for simplicity to get usage stats easily.
-        # 'extra_body' can be used for custom parameters if needed, but we stick to standard fields for now.
         payload = {
             "model": model,
             "messages": openai_messages,
@@ -74,18 +69,14 @@ class PoeChatClient:
                 
                 data = await resp.json()
                 
-                # Extract text
                 choices = data.get("choices", [])
                 if not choices:
                     text_response = ""
                 else:
                     text_response = choices[0].get("message", {}).get("content", "")
                 
-                # Extract usage
                 usage = data.get("usage", {})
                 
-                # OpenAI API on Poe usually embeds image links in text or returns them.
-                # We return empty attachments list as the text likely contains the links.
                 return {
                     "text": text_response,
                     "attachments": [],

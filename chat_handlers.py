@@ -23,7 +23,6 @@ router = Router()
 ai = PoeChatClient()
 
 async def get_points_cost(query_id: str, created: int, bot_name: str, request_id: str = "N/A") -> int | None:
-    # [FIX] Added Accept-Encoding to avoid Brotli (br) compression issues
     headers = {
         "Authorization": f"Bearer {POE_API_KEY}",
         "Accept-Encoding": "gzip, deflate"
@@ -398,7 +397,6 @@ async def handle_message(message: Message):
     else:
         decorated_reply = normalized_reply + "\n\n**Стоимость ?**"
     
-    # Re-fetch context to check for race conditions
     latest_messages = await asyncio.to_thread(db.get_context, chat_id, model)
     
     final_user_content = content
@@ -408,9 +406,7 @@ async def handle_message(message: Message):
         final_user_content += "\n\n[THIS QUERY HAS BEEN SIMULTANEOUS, CHRONOLOGICAL ERRORS POSSIBLE]"
         final_assistant_content += "\n\n[THIS RESPONSE HAS BEEN SIMULTANEOUS, CHRONOLOGICAL ERRORS POSSIBLE]"
     
-    # Prepare messages for saving
     user_msg_to_save = {"role": "user", "content": final_user_content}
-    # Note: Attachments are not saved to DB context to save space/complexity as per original logic (trimmed_clean)
     
     assistant_msg_to_save = {"role": "assistant", "content": final_assistant_content}
     
