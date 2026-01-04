@@ -25,10 +25,8 @@ def post_process_response_text(text: str) -> str:
             processed.append("**Для данного запроса использовался интернет. Источники были скрыты.**")
             break
         
-        # Remove citations like [1], [ 2 ], [12]
-        line = re.sub(r"\[\s*\d+\s*\]", "", line)
-        # Remove citations like [1](url) if present
-        line = re.sub(r"\[\s*\d+\s*\]\s*\([^)]*?\)", "", line)
+        # Remove citations like [1], [1, 2]
+        line = re.sub(r"\[\d+(?:,\s*\d+)*\]", "", line)
 
         processed.append(line)
     processed_text = "\n".join(processed)

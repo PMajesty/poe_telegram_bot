@@ -3,12 +3,15 @@ import re
 import requests
 from datetime import timedelta
 from zoneinfo import ZoneInfo
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes
+from aiogram import Router, F
+from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.filters import Command, CommandObject
 from config import POE_API_KEY, ADMIN_CHAT_ID, BOT_CONFIGS, ECONOMY_BOTS, ADMIN_USERNAME
 from handlers_shared import db
 import handlers_shared
 from chat_handlers import safe_reply_markdown, ensure_whitelisted_or_prompt
+
+router = Router()
 
 def is_admin_user(user) -> bool:
     return bool(user and user.username == ADMIN_USERNAME)
@@ -30,17 +33,12 @@ async def fetch_current_balance():
     except Exception:
         return None
 
-def build_trigger_map():
-    m = {}
-    for triggers, model in BOT_CONFIGS.items():
-        for t in triggers:
-            m[t.lower()] = model
-    return m
+@router.message(F.text.casefold() == "ии")
+async def handle_bots_list_command_text(message: Message):
+    await handle_bots_list_command(message)
 
-async def handle_bots_list_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
-        return
-    allowed, _ = await ensure_whitelisted_or_prompt(update, context)
+async def handle_bots_list_command(message: Message):
+    allowed, _ = await ensure_whitelisted_or_prompt(message)
     if not allowed:
         return
     sorted_bots = sorted(BOT_CONFIGS.items(), key=lambda item: item[1])
@@ -73,95 +71,86 @@ async def handle_bots_list_command(update: Update, context: ContextTypes.DEFAULT
     reply_lines.append("• `/collapsible_quote_off` — выключить режим разворачиваемых цитат в этом чате.")
     reply_lines.append("• Сообщение «ИИ» — показать список ботов, команд и текущий баланс.")
     reply_text = "\n".join(reply_lines)
-    await safe_reply_markdown(update, reply_text)
+    await safe_reply_markdown(message, reply_text)
 
-async def handle_leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
-        return
-    if not is_admin_user(update.effective_user):
+@router.message(Command("leaderboard"))
+async def handle_leaderboard_command(message: Message):
+    if not is_admin_user(message.from_user):
         return
     rows = await asyncio.to_thread(db.list_usage_leaderboard_usernames)
     if not rows:
-        await update.message.reply_text("Нет данных по использованию.")
+        await message.answer("Нет данных по использованию.")
         return
     lines = ["Лидерборд по использованию очков:"]
     for idx, r in enumerate(rows, start=1):
         uname = r.get("username") or "нет данных"
         lines.append(f"{idx}. @{uname} — {r['total_points']} очков")
     text = "\n".join(lines)
-    await safe_reply_markdown(update, text)
+    await safe_reply_markdown(message, text)
 
-async def handle_leaderboard_reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
-        return
-    if not is_admin_user(update.effective_user):
+@router.message(Command("leaderboard_reset"))
+async def handle_leaderboard_reset_command(message: Message):
+    if not is_admin_user(message.from_user):
         return
     await asyncio.to_thread(db.reset_usage_leaderboard_usernames)
-    await update.message.reply_text("Лидерборд сброшен.")
+    await message.answer("Лидерборд сброшен.")
 
-async def handle_whitelist_request_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    if not query:
-        return
-    await query.answer()
-    data = query.data or ""
-    if not data.startswith("whitelist_request:"):
-        return
+@router.callback_query(F.data.startswith("whitelist_request:"))
+async def handle_whitelist_request_callback(callback: CallbackQuery):
+    await callback.answer()
+    data = callback.data or ""
     try:
         entity_id = int(data.split(":", 1)[1])
     except Exception:
         return
     try:
-        await query.edit_message_text("Ваш запрос был отправлен администратору.")
+        await callback.message.edit_text("Ваш запрос был отправлен администратору.")
     except Exception:
         pass
-    chat = query.message.chat if query.message else update.effective_chat
-    user = query.from_user
+    
+    chat = callback.message.chat if callback.message else None
+    user = callback.from_user
     if chat and chat.type == "private":
         name_or_tag = f"@{user.username}" if user and user.username else (user.full_name if user else "Unknown")
     else:
         name_or_tag = chat.title if chat and chat.title else str(entity_id)
+        
     admin_text = f"Запрос на добавление в белый список.\nID: {entity_id}\nИмя/тег: {name_or_tag}"
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Добавить в белый список.", callback_data=f"whitelist_approve:{entity_id}")]
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Добавить в белый список.", callback_data=f"whitelist_approve:{entity_id}")]
     ])
     try:
-        await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_text, reply_markup=keyboard)
+        await callback.bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_text, reply_markup=keyboard)
     except Exception:
         pass
 
-async def handle_whitelist_approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    if not query:
+@router.callback_query(F.data.startswith("whitelist_approve:"))
+async def handle_whitelist_approve_callback(callback: CallbackQuery):
+    await callback.answer()
+    if not is_admin_user(callback.from_user):
         return
-    await query.answer()
-    if not is_admin_user(query.from_user):
-        return
-    data = query.data or ""
-    if not data.startswith("whitelist_approve:"):
-        return
+    data = callback.data or ""
     try:
         entity_id = int(data.split(":", 1)[1])
     except Exception:
         return
     await asyncio.to_thread(db.add_to_whitelist, entity_id)
     try:
-        await query.edit_message_text(f"ID {entity_id} добавлен в белый список.")
+        await callback.message.edit_text(f"ID {entity_id} добавлен в белый список.")
     except Exception:
         pass
     try:
-        await context.bot.send_message(chat_id=entity_id, text="Вы добавлены в белый список и можете пользоваться ботом.")
+        await callback.bot.send_message(chat_id=entity_id, text="Вы добавлены в белый список и можете пользоваться ботом.")
     except Exception:
         pass
 
-async def handle_whitelist_list_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
-        return
-    if not is_admin_user(update.effective_user):
+@router.message(Command("whitelist_list"))
+async def handle_whitelist_list_command(message: Message):
+    if not is_admin_user(message.from_user):
         return
     details = await asyncio.to_thread(db.list_whitelist_details)
     if not details:
-        await update.message.reply_text("Белый список пуст.")
+        await message.answer("Белый список пуст.")
         return
     details = sorted(details, key=lambda d: (0 if d["last_username"] else 1))
     lines = ["Текущий белый список:"]
@@ -176,29 +165,27 @@ async def handle_whitelist_list_command(update: Update, context: ContextTypes.DE
             last_activity_display = "нет данных"
         lines.append(f"{username_display} | {entity_id} | Последняя активность: {last_activity_display}")
     text = "\n".join(lines)
-    await safe_reply_markdown(update, text)
+    await safe_reply_markdown(message, text)
 
-async def handle_whitelist_remove_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
+@router.message(Command("whitelist_remove"))
+async def handle_whitelist_remove_command(message: Message, command: CommandObject):
+    if not is_admin_user(message.from_user):
         return
-    if not is_admin_user(update.effective_user):
-        return
-    args = context.args or []
+    args = command.args
     if not args:
-        await update.message.reply_text("Использование: /whitelist_remove <ID>")
+        await message.answer("Использование: /whitelist_remove <ID>")
         return
     try:
-        entity_id = int(args[0])
+        entity_id = int(args.strip())
     except Exception:
-        await update.message.reply_text("Неверный ID.")
+        await message.answer("Неверный ID.")
         return
     await asyncio.to_thread(db.remove_from_whitelist, entity_id)
-    await update.message.reply_text(f"ID {entity_id} удален из белого списка.")
+    await message.answer(f"ID {entity_id} удален из белого списка.")
 
-async def handle_economy_on_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
-        return
-    if not is_admin_user(update.effective_user):
+@router.message(Command("economy_on"))
+async def handle_economy_on_command(message: Message):
+    if not is_admin_user(message.from_user):
         return
     handlers_shared.economy_mode = True
     await asyncio.to_thread(db.set_economy_mode, True)
@@ -208,35 +195,32 @@ async def handle_economy_on_command(update: Update, context: ContextTypes.DEFAUL
             allowed_triggers.extend(triggers)
     allowed_triggers = list(dict.fromkeys(allowed_triggers))
     if allowed_triggers:
-        await update.message.reply_text("Режим экономии включен. Доступны боты: " + ", ".join(allowed_triggers) + ".")
+        await message.answer("Режим экономии включен. Доступны боты: " + ", ".join(allowed_triggers) + ".")
     else:
-        await update.message.reply_text("Режим экономии включен.")
+        await message.answer("Режим экономии включен.")
 
-async def handle_economy_off_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
-        return
-    if not is_admin_user(update.effective_user):
+@router.message(Command("economy_off"))
+async def handle_economy_off_command(message: Message):
+    if not is_admin_user(message.from_user):
         return
     handlers_shared.economy_mode = False
     await asyncio.to_thread(db.set_economy_mode, False)
-    await update.message.reply_text("Режим экономии выключен. Доступны все боты.")
+    await message.answer("Режим экономии выключен. Доступны все боты.")
 
-async def handle_collapsible_quote_on_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
-        return
-    allowed, _ = await ensure_whitelisted_or_prompt(update, context)
+@router.message(Command("collapsible_quote_on"))
+async def handle_collapsible_quote_on_command(message: Message):
+    allowed, _ = await ensure_whitelisted_or_prompt(message)
     if not allowed:
         return
-    chat_id = update.effective_chat.id
+    chat_id = message.chat.id
     await asyncio.to_thread(db.set_collapsible_quote_mode, chat_id, True)
-    await update.message.reply_text("Режим разворачиваемых цитат включен для этого чата.")
+    await message.answer("Режим разворачиваемых цитат включен для этого чата.")
 
-async def handle_collapsible_quote_off_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
-        return
-    allowed, _ = await ensure_whitelisted_or_prompt(update, context)
+@router.message(Command("collapsible_quote_off"))
+async def handle_collapsible_quote_off_command(message: Message):
+    allowed, _ = await ensure_whitelisted_or_prompt(message)
     if not allowed:
         return
-    chat_id = update.effective_chat.id
+    chat_id = message.chat.id
     await asyncio.to_thread(db.set_collapsible_quote_mode, chat_id, False)
-    await update.message.reply_text("Режим разворачиваемых цитат выключен для этого чата.")
+    await message.answer("Режим разворачиваемых цитат выключен для этого чата.")

@@ -1,0 +1,7 @@
+aiogram>=3.0
+fastapi-poe
+pg8000
+python-dotenv
+telegramify-markdown
+aiohttp
+requests

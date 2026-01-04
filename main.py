@@ -1,57 +1,34 @@
 import logging
-import re
 import os
-from telegram.ext import Application, MessageHandler, CommandHandler, CallbackQueryHandler, filters
-from telegram.request import HTTPXRequest
+import asyncio
+from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 from config import TELEGRAM_BOT_TOKEN
-from chat_handlers import handle_message, handle_start, handle_clear_command
-from command_handlers import (
-    handle_bots_list_command,
-    handle_leaderboard_command,
-    handle_leaderboard_reset_command,
-    handle_whitelist_request_callback,
-    handle_whitelist_approve_callback,
-    handle_whitelist_list_command,
-    handle_whitelist_remove_command,
-    handle_economy_on_command,
-    handle_economy_off_command,
-    handle_collapsible_quote_on_command,
-    handle_collapsible_quote_off_command,
-)
+from command_handlers import router as command_router
+from chat_handlers import router as chat_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-def main():
+async def main():
     current_no_proxy = os.environ.get("NO_PROXY", "")
     if "api.telegram.org" not in current_no_proxy:
         os.environ["NO_PROXY"] = ",".join(filter(None, [current_no_proxy, "api.telegram.org"]))
 
-    request = HTTPXRequest(
-        connection_pool_size=8,
-        read_timeout=120.0,
-        write_timeout=120.0,
-        connect_timeout=120.0,
-        pool_timeout=120.0
+    bot = Bot(
+        token=TELEGRAM_BOT_TOKEN,
+        default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2)
     )
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).request(request).build()
-    app.add_handler(CommandHandler("start", handle_start))
-    app.add_handler(CommandHandler("clear", handle_clear_command))
-    app.add_handler(CommandHandler("leaderboard", handle_leaderboard_command))
-    app.add_handler(CommandHandler("leaderboard_reset", handle_leaderboard_reset_command))
-    app.add_handler(CommandHandler("whitelist_list", handle_whitelist_list_command))
-    app.add_handler(CommandHandler("whitelist_remove", handle_whitelist_remove_command))
-    app.add_handler(CommandHandler("economy_on", handle_economy_on_command))
-    app.add_handler(CommandHandler("economy_off", handle_economy_off_command))
-    app.add_handler(CommandHandler("collapsible_quote_on", handle_collapsible_quote_on_command))
-    app.add_handler(CommandHandler("collapsible_quote_off", handle_collapsible_quote_off_command))
-    app.add_handler(CallbackQueryHandler(handle_whitelist_approve_callback, pattern=re.compile(r"^whitelist_approve:")))
-    app.add_handler(CallbackQueryHandler(handle_whitelist_request_callback, pattern=re.compile(r"^whitelist_request:")))
-    app.add_handler(MessageHandler(filters.Regex(re.compile(r'^ии$', re.IGNORECASE)) & ~filters.COMMAND, handle_bots_list_command))
-    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
-    app.run_polling(drop_pending_updates=True)
+    
+    dp = Dispatcher()
+    
+    dp.include_router(command_router)
+    dp.include_router(chat_router)
+
+    await dp.start_polling(bot, drop_pending_updates=True)
 
 if __name__ == "__main__":
     try:
-        main()
+        asyncio.run(main())
     except KeyboardInterrupt:
-        logging.info("Остановка по Ctrl+C")
+        logging.info("Stopped by Ctrl+C")
