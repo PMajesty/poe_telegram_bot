@@ -5,7 +5,6 @@ from telegramify_markdown import customize
 MDV2_SPECIALS = r"_*[]()~`>#+-=|{}.!"
 
 def post_process_response_text(text: str) -> str:
-    print(text)
     if not text:
         return ""
     lines = text.split("\n")
@@ -13,7 +12,7 @@ def post_process_response_text(text: str) -> str:
     in_thinking_block = False
     for i, line in enumerate(lines):
         stripped = line.strip()
-        if i == 0 and stripped == "*Thinking...*":
+        if stripped == "*Thinking...*":
             continue
         if stripped.startswith(">") and not in_thinking_block:
             in_thinking_block = True
@@ -22,10 +21,15 @@ def post_process_response_text(text: str) -> str:
             if stripped and stripped.startswith(">"):
                 continue
             in_thinking_block = False
-        if stripped == "---" and i + 1 < len(lines) and lines[i + 1].strip() == "Learn more:":
+        if stripped == "---" and i + 1 < len(lines) and lines[i + 1].strip() in ("Learn more:", "Related searches:"):
             processed.append("**Для данного запроса использовался интернет. Источники были скрыты.**")
             break
-        line = re.sub(r"\[\[\s*\d+\s*\]\]\s*\([^)]*?\)", "", line)
+        
+        # Remove citations like [1], [ 2 ], [12]
+        line = re.sub(r"\[\s*\d+\s*\]", "", line)
+        # Remove citations like [1](url) if present
+        line = re.sub(r"\[\s*\d+\s*\]\s*\([^)]*?\)", "", line)
+
         processed.append(line)
     processed_text = "\n".join(processed)
     disclaimer = (

@@ -6,7 +6,7 @@ import fastapi_poe as fp
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from telegram.error import BadRequest
+from telegram.error import BadRequest, TimedOut, NetworkError
 import telegramify_markdown
 from config import BOT_CONFIGS, CONTEXT_MAX_MESSAGES, POE_API_KEY, ADMIN_CHAT_ID, ECONOMY_BOTS, UPLOAD_PROXY_URL
 from handlers_shared import db
@@ -104,25 +104,56 @@ async def safe_reply_markdown(update: Update, text: str):
         parts = [p + "||" for p in parts]
     else:
         parts = sanitize_and_chunk_text(text)
+    
     for part in parts:
-        try:
-            await update.message.reply_text(part, parse_mode="MarkdownV2")
-        except BadRequest as e:
-            if "Can't parse entities" in str(e):
-                logging.warning("MarkdownV2 parse error, falling back to plain text: %s", e)
+        max_retries = 5
+        backoff = 1.0
+        for attempt in range(max_retries):
+            try:
+                await update.message.reply_text(part, parse_mode="MarkdownV2")
+                break
+            except (TimedOut, NetworkError) as e:
+                logging.warning(f"Attempt {attempt + 1}/{max_retries} failed to send message: {e}. Retrying in {backoff}s...")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(backoff)
+                    backoff *= 2
+                    continue
+                else:
+                    logging.exception("All retry attempts failed for message part.", exc_info=e)
+                    try:
+                        await update.message.reply_text("Error: Operation timed out or network error.")
+                    except Exception:
+                        pass
+            except BadRequest as e:
+                if "Can't parse entities" in str(e):
+                    logging.warning("MarkdownV2 parse error, falling back to plain text: %s", e)
+                    try:
+                        plain = re.sub(r"\\([_*[]()~`>#+\-=|{}.!])", r"\1", part)
+                        await update.message.reply_text(plain, parse_mode=None)
+                    except Exception as e2:
+                        logging.exception("Failed to send plain text fallback", exc_info=e2)
+                        try:
+                            await update.message.reply_text(
+                                "Ошибка форматирования ответа, отправляю как обычный текст:\n\n" +
+                                re.sub(r"\\([_*[]()~`>#+\-=|{}.!])", r"\1", part),
+                                parse_mode=None
+                            )
+                        except Exception:
+                            pass
+                else:
+                    logging.exception("BadRequest when sending message", exc_info=e)
+                    try:
+                        await update.message.reply_text(re.sub(r"\\([_*[]()~`>#+\-=|{}.!])", r"\1", part), parse_mode=None)
+                    except Exception:
+                        pass
+                break
+            except Exception as e:
+                logging.exception("Unexpected error sending message", exc_info=e)
                 try:
-                    plain = re.sub(r"\\([_*[]()~`>#+\-=|{}.!])", r"\1", part)
-                    await update.message.reply_text(plain, parse_mode=None)
-                except Exception as e2:
-                    logging.exception("Failed to send plain text fallback", exc_info=e2)
-                    await update.message.reply_text(
-                        "Ошибка форматирования ответа, отправляю как обычный текст:\n\n" +
-                        re.sub(r"\\([_*[]()~`>#+\-=|{}.!])", r"\1", part),
-                        parse_mode=None
-                    )
-            else:
-                logging.exception("BadRequest when sending message", exc_info=e)
-                await update.message.reply_text(re.sub(r"\\([_*[]()~`>#+\-=|{}.!])", r"\1", part), parse_mode=None)
+                    await update.message.reply_text(f"Error: {e}")
+                except Exception:
+                    pass
+                break
 
 async def ensure_whitelisted_or_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
@@ -270,7 +301,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if response_attachments:
         for attachment in response_attachments:
             if attachment.inline_ref and attachment.url:
-                pattern = re.compile(r"!\[.*?\]\[" + re.escape(attachment.inline_ref) + r"\]")
+                pattern = re.compile(r"![.*?][" + re.escape(attachment.inline_ref) + r"]")
                 image_markdown_link = f"[\u200b]({attachment.url})"
                 reply_text, _ = re.subn(pattern, image_markdown_link, reply_text)
 

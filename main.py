@@ -1,6 +1,8 @@
 import logging
 import re
+import os
 from telegram.ext import Application, MessageHandler, CommandHandler, CallbackQueryHandler, filters
+from telegram.request import HTTPXRequest
 from config import TELEGRAM_BOT_TOKEN
 from chat_handlers import handle_message, handle_start, handle_clear_command
 from command_handlers import (
@@ -20,7 +22,18 @@ from command_handlers import (
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 def main():
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    current_no_proxy = os.environ.get("NO_PROXY", "")
+    if "api.telegram.org" not in current_no_proxy:
+        os.environ["NO_PROXY"] = ",".join(filter(None, [current_no_proxy, "api.telegram.org"]))
+
+    request = HTTPXRequest(
+        connection_pool_size=8,
+        read_timeout=120.0,
+        write_timeout=120.0,
+        connect_timeout=120.0,
+        pool_timeout=120.0
+    )
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).request(request).build()
     app.add_handler(CommandHandler("start", handle_start))
     app.add_handler(CommandHandler("clear", handle_clear_command))
     app.add_handler(CommandHandler("leaderboard", handle_leaderboard_command))
