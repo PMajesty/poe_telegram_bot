@@ -1,10 +1,11 @@
 import aiohttp
 import json
+import logging
 from config import POE_API_KEY, POE_BASE_URL
 from typing import Dict, Any, List
 
 class PoeChatClient:
-    async def chat(self, model: str, messages: list[dict]) -> Dict[str, Any]:
+    async def chat(self, model: str, messages: list[dict], request_id: str = "N/A") -> Dict[str, Any]:
         openai_messages = []
         
         for msg in messages:
@@ -54,17 +55,21 @@ class PoeChatClient:
             "stream": False
         }
 
+        logging.info(f"[{request_id}] Sending POST request to Poe API ({POE_BASE_URL}/chat/completions) for model: {model}")
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 f"{POE_BASE_URL}/chat/completions",
                 headers={
                     "Authorization": f"Bearer {POE_API_KEY}",
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
+                    "Accept-Encoding": "gzip, deflate"
                 },
                 json=payload
             ) as resp:
+                logging.info(f"[{request_id}] Received response from Poe API. Status: {resp.status}")
                 if resp.status != 200:
                     error_text = await resp.text()
+                    logging.error(f"[{request_id}] Poe API Error Body: {error_text}")
                     raise Exception(f"Poe API Error {resp.status}: {error_text}")
                 
                 data = await resp.json()

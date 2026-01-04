@@ -5,3 +5,4 @@ python-dotenv
 telegramify-markdown
 aiohttp
 requests
+aiohttp-socks
